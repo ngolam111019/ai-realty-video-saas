@@ -1,0 +1,11 @@
+# AI Assistant Instructions & Coding Rules
+
+You must read and adhere to the guidelines configured inside the `.claude/rules/` directory for this workspace before editing code.
+
+Key documents to review:
+1. **Clean Code & Style:** Refer to `.claude/rules/clean-code.md` and `.claude/rules/code-style.md`
+2. **Architecture:** Refer to `.claude/rules/project-structure.md` and `.claude/rules/system-design.md`
+3. **Database & API:** Refer to `.claude/rules/database.md` and `.claude/rules/api-conventions.md`
+4. **Security & Quality:** Refer to `.claude/rules/security.md`, `.claude/rules/error-handling.md`, and `.claude/rules/testing.md`
+
+All code generated must follow these rules without exception.

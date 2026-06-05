@@ -1,0 +1,23 @@
+{
+  "name": "services-video-processor",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@realty-video/database": "workspace:*",
+    "bullmq": "^5.8.2",
+    "ioredis": "^5.4.1",
+    "dotenv": "^16.4.5",
+    "pino": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "nodemon": "^3.1.0",
+    "ts-node": "^10.9.2"
+  }
+}

@@ -74,15 +74,15 @@ AUDIO-FIRST: TTS chạy TRƯỚC, đo duration thực → build timeline THEO au
 | W1-06                       | Draft Saver + Notifier  | Worker 1 | 3h       | W1-05, S-03  |           | ✅ DONE      |
 | W1-07                       | Worker 1 Orchestrator   | Worker 1 | 4h       | W1-01~W1-06  |           | ✅ DONE      |
 | **WORKER 2 — Video Render** |                         |          |          |              |           |              |
-| W2-01                       | FPT.AI TTS              | Worker 2 | 6h       | S-01         |           | ⬜ TODO      |
+| W2-01                       | FPT.AI TTS              | Worker 2 | 6h       | S-01         |           | ✅ DONE      |
 | W2-02                       | ElevenLabs TTS          | Worker 2 | 4h       | S-01         |           | ➖ POSTPONED |
-| W2-03                       | TTS Cache               | Worker 2 | 3h       | W2-01        |           | ⬜ TODO      |
-| W2-04                       | Clip Extractor (FFmpeg) | Worker 2 | 5h       | S-01         |           | ⬜ TODO      |
-| W2-05                       | Timeline Builder        | Worker 2 | 4h       | W2-01, W2-04 |           | ⬜ TODO      |
-| W2-06                       | FFmpeg Renderer         | Worker 2 | 10h      | W2-05        |           | ⬜ TODO      |
-| W2-07                       | Remotion Renderer       | Worker 2 | 8h       | W2-05        |           | ⬜ TODO      |
-| W2-08                       | Uploader                | Worker 2 | 4h       | S-04         |           | ⬜ TODO      |
-| W2-09                       | Worker 2 Orchestrator   | Worker 2 | 6h       | W2-01~W2-08  |           | ⬜ TODO      |
+| W2-03                       | TTS Cache               | Worker 2 | 3h       | W2-01        |           | ✅ DONE      |
+| W2-04                       | Clip Extractor (FFmpeg) | Worker 2 | 5h       | S-01         |           | ✅ DONE      |
+| W2-05                       | Timeline Builder        | Worker 2 | 4h       | W2-01, W2-04 |           | ✅ DONE      |
+| W2-06                       | FFmpeg Renderer         | Worker 2 | 10h      | W2-05        |           | ✅ DONE      |
+| W2-07                       | Remotion Renderer       | Worker 2 | 8h       | W2-05        |           | ➖ POSTPONED |
+| W2-08                       | Uploader                | Worker 2 | 4h       | S-04         |           | ✅ DONE      |
+| W2-09                       | Worker 2 Orchestrator   | Worker 2 | 6h       | W2-01~W2-08  |           | ✅ DONE      |
 
 **Tổng estimate:** ~83 giờ (~11 ngày làm việc)
 
@@ -1306,7 +1306,7 @@ test('E2E-01: Worker 1 xử lý job từ đầu đến cuối', async () => {
 
 ### Mục Đích
 
-Gọi FPT.AI TTS API, nhận MP3 audio + word timestamps. Đây là provider chính (rẻ nhất, tiếng Việt tốt nhất).
+Gọi FPT.AI TTS API, nhận MP3 audio stream. Đây là provider chính phục vụ tiếng Việt.
 
 ### Input
 
@@ -2078,7 +2078,7 @@ test('E2E-02: Token được hoàn khi render fail', async () => {
 ❓ FFmpeg render video 60s mất bao lâu trên Railway Starter ($5)?
    → Trả lời sau W2-06: ___
 
-❓ FPT.AI word timestamps có chính xác không (sync caption)?
+❓ FPT.AI có cần cache nhiều không?
    → Trả lời sau W2-01: ___
 
 ❓ Clip extraction deshake có tốt không (so với không deshake)?

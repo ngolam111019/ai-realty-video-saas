@@ -10,39 +10,64 @@ async function run() {
 
   console.info('Đang bắt đầu dọn dẹp dữ liệu kiểm thử tương tác (Worker 1)...');
 
-  // Tìm User test
-  const user = await db.user.findUnique({
-    where: { email: 'interactive-pipeline-tester@example.com' },
-  });
+  const emails = [
+    'interactive-pipeline-tester@example.com',
+    'interactive-render-tester@example.com',
+  ];
 
-  if (!user) {
-    console.info('Không tìm thấy dữ liệu kiểm thử nào cần dọn dẹp.');
-    process.exit(0);
+  for (const email of emails) {
+    console.info(`Đang dọn dẹp dữ liệu của user: ${email}...`);
+    const user = await db.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      console.info(`- Không tìm thấy dữ liệu cho ${email}.`);
+      continue;
+    }
+
+    // Xóa toàn bộ VideoJob liên quan trước
+    const deletedJobs = await db.videoJob.deleteMany({
+      where: { userId: user.id },
+    });
+    console.info(`- Đã xóa ${deletedJobs.count} bản ghi VideoJob.`);
+
+    // Xóa Wallet
+    await db.tokenWallet.deleteMany({
+      where: { userId: user.id },
+    });
+    console.info('- Đã xóa TokenWallet.');
+
+    // Xóa Transaction
+    await db.transaction.deleteMany({
+      where: { userId: user.id },
+    });
+    console.info('- Đã xóa Transaction.');
+
+    // Xóa toàn bộ ScriptDraft liên quan
+    const deletedDrafts = await db.scriptDraft.deleteMany({
+      where: { userId: user.id },
+    });
+    console.info(`- Đã xóa ${deletedDrafts.count} bản ghi ScriptDraft.`);
+
+    // Xóa toàn bộ MediaAsset liên quan
+    const deletedAssets = await db.mediaAsset.deleteMany({
+      where: { userId: user.id },
+    });
+    console.info(`- Đã xóa ${deletedAssets.count} bản ghi MediaAsset.`);
+
+    // Xóa Project liên quan
+    const deletedProjects = await db.project.deleteMany({
+      where: { userId: user.id },
+    });
+    console.info(`- Đã xóa ${deletedProjects.count} bản ghi Project.`);
+
+    // Xóa User test
+    await db.user.delete({
+      where: { id: user.id },
+    });
+    console.info(`- Đã xóa User: ${email}.`);
   }
-
-  // Xóa toàn bộ ScriptDraft liên quan
-  const deletedDrafts = await db.scriptDraft.deleteMany({
-    where: { userId: user.id },
-  });
-  console.info(`- Đã xóa ${deletedDrafts.count} bản ghi ScriptDraft.`);
-
-  // Xóa toàn bộ MediaAsset liên quan
-  const deletedAssets = await db.mediaAsset.deleteMany({
-    where: { userId: user.id },
-  });
-  console.info(`- Đã xóa ${deletedAssets.count} bản ghi MediaAsset.`);
-
-  // Xóa Project liên quan
-  const deletedProjects = await db.project.deleteMany({
-    where: { userId: user.id },
-  });
-  console.info(`- Đã xóa ${deletedProjects.count} bản ghi Project.`);
-
-  // Xóa User test
-  await db.user.delete({
-    where: { id: user.id },
-  });
-  console.info('- Đã xóa User kiểm thử.');
 
   // Xóa VideoTemplate
   await db.videoTemplate

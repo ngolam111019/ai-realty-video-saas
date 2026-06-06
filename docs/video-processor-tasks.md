@@ -61,18 +61,18 @@ AUDIO-FIRST: TTS chạy TRƯỚC, đo duration thực → build timeline THEO au
 | Task                        | Tên                     | Phase    | Estimate | Phụ thuộc    | Người làm | Trạng thái |
 | --------------------------- | ----------------------- | -------- | -------- | ------------ | --------- | ---------- |
 | **SETUP**                   |                         |          |          |              |           |            |
-| S-01                        | Project Init            | Setup    | 2h       | —            |           | ⬜ TODO    |
-| S-02                        | Redis + BullMQ scaffold | Setup    | 2h       | S-01         |           | ⬜ TODO    |
-| S-03                        | Prisma client           | Setup    | 1h       | S-01         |           | ⬜ TODO    |
-| S-04                        | R2/S3 client            | Setup    | 2h       | S-01         |           | ⬜ TODO    |
+| S-01                        | Project Init            | Setup    | 2h       | —            |           | ✅ DONE    |
+| S-02                        | Redis + BullMQ scaffold | Setup    | 2h       | S-01         |           | ✅ DONE    |
+| S-03                        | Prisma client           | Setup    | 1h       | S-01         |           | ✅ DONE    |
+| S-04                        | R2/S3 client            | Setup    | 2h       | S-01         |           | ✅ DONE    |
 | **WORKER 1 — Script Gen**   |                         |          |          |              |           |            |
-| W1-01                       | Media Downloader        | Worker 1 | 4h       | S-04         |           | ⬜ TODO    |
-| W1-02                       | AI Vision — Images      | Worker 1 | 6h       | W1-01        |           | ⬜ TODO    |
-| W1-03                       | AI Vision — Videos      | Worker 1 | 5h       | W1-01        |           | ⬜ TODO    |
-| W1-04                       | Vision Cache            | Worker 1 | 2h       | W1-02, W1-03 |           | ⬜ TODO    |
-| W1-05                       | Script Generator        | Worker 1 | 8h       | W1-02, W1-03 |           | ⬜ TODO    |
-| W1-06                       | Draft Saver + Notifier  | Worker 1 | 3h       | W1-05, S-03  |           | ⬜ TODO    |
-| W1-07                       | Worker 1 Orchestrator   | Worker 1 | 4h       | W1-01~W1-06  |           | ⬜ TODO    |
+| W1-01                       | Media Downloader        | Worker 1 | 4h       | S-04         |           | ✅ DONE    |
+| W1-02                       | AI Vision — Images      | Worker 1 | 6h       | W1-01        |           | ✅ DONE    |
+| W1-03                       | AI Vision — Videos      | Worker 1 | 5h       | W1-01        |           | ✅ DONE    |
+| W1-04                       | Vision Cache            | Worker 1 | 2h       | W1-02, W1-03 |           | ✅ DONE    |
+| W1-05                       | Script Generator        | Worker 1 | 8h       | W1-02, W1-03 |           | ✅ DONE    |
+| W1-06                       | Draft Saver + Notifier  | Worker 1 | 3h       | W1-05, S-03  |           | ✅ DONE    |
+| W1-07                       | Worker 1 Orchestrator   | Worker 1 | 4h       | W1-01~W1-06  |           | ✅ DONE    |
 | **WORKER 2 — Video Render** |                         |          |          |              |           |            |
 | W2-01                       | FPT.AI TTS              | Worker 2 | 6h       | S-01         |           | ⬜ TODO    |
 | W2-02                       | ElevenLabs TTS          | Worker 2 | 4h       | S-01         |           | ⬜ TODO    |

@@ -8,7 +8,14 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest",
-    "test:vision": "ts-node scripts/test-vision.ts"
+    "test:vision": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-vision.ts",
+    "test:video-vision": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-video-vision.ts",
+    "test:cache": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-cache.ts",
+    "test:script-gen": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-script-gen.ts",
+    "test:draft-saver": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-draft-saver.ts",
+    "test:orchestrator": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-orchestrator.ts",
+    "test:pipeline": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-full-pipeline-interactive.ts",
+    "test:pipeline-clean": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/clean-interactive-test.ts"
   },
   "dependencies": {
     "@realty-video/database": "workspace:*",

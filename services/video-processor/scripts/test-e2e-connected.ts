@@ -1,4 +1,4 @@
-// services/video-processor/scripts/test-full-pipeline-interactive.ts
+// services/video-processor/scripts/test-e2e-connected.ts
 /* eslint-disable @typescript-eslint/no-var-requires */
 import dotenv from 'dotenv';
 import * as path from 'path';
@@ -25,24 +25,31 @@ require.cache[s3Path] = {
       console.info(`   [Mock R2 S3]: Đang sao chép file cục bộ từ ${sourcePath} -> ${localPath}`);
       await fs.promises.copyFile(sourcePath, localPath);
     },
+    uploadToR2: async (localPath: string, destKey: string, _contentType: string) => {
+      const destPath = path.join(TEST_ASSETS_DIR, path.basename(destKey));
+      console.info(
+        `   [Mock R2 S3]: Uploading file lên CDN R2 (giả lập copy cục bộ): ${localPath} -> ${destPath}`,
+      );
+      await fs.promises.copyFile(localPath, destPath);
+      return `http://mock-cdn.realty-video.com/${destKey}`;
+    },
   },
 } as any;
 
 async function run() {
   console.info('================================================================');
-  console.info('    KIỂM THỬ TOÀN BỘ PIPELINE WORKER 1 (SCRIPT GENERATION)     ');
+  console.info('   KIỂM THỬ LIÊN THÔNG TOÀN DIỆN E2E (WORKER 1 -> WORKER 2)    ');
   console.info('================================================================');
 
   // Bước 1: Kiểm tra thư mục test-assets
   if (!fs.existsSync(TEST_ASSETS_DIR)) {
     fs.mkdirSync(TEST_ASSETS_DIR);
     console.info(`\n[Thông báo]: Thư mục test-assets đã được tạo tại: ${TEST_ASSETS_DIR}`);
-    console.info('Vui lòng bỏ vào thư mục trên các file sau:');
+    console.info('Vui lòng chuẩn bị các file sau trong thư mục test-assets:');
     console.info('  1. livingroom.jpg (Ảnh phòng khách)');
     console.info('  2. bedroom.jpg (Ảnh phòng ngủ)');
     console.info('  3. test-property.mp4 (Video ngắn quảng cáo)');
     console.info('  4. avatar.jpg (Ảnh chân dung sale)');
-    console.info('\nHãy chuẩn bị các file trên rồi chạy lại lệnh này.');
     process.exit(0);
   }
 
@@ -50,19 +57,16 @@ async function run() {
   const missingFiles = requiredFiles.filter((f) => !fs.existsSync(path.join(TEST_ASSETS_DIR, f)));
 
   if (missingFiles.length > 0) {
-    console.warn(
-      `\n[Cảnh báo]: Thư mục test-assets đang thiếu các file sau: ${missingFiles.join(', ')}`,
-    );
-    console.info('Hãy copy đủ các file này vào thư mục test-assets rồi chạy lại script.');
+    console.warn(`\n[Cảnh báo]: Thư mục test-assets đang thiếu: ${missingFiles.join(', ')}`);
     process.exit(0);
   }
 
   const { db } = await import('../src/lib/db');
   const { redis } = await import('../src/lib/redis');
 
-  console.info('\nStep 1: Khởi tạo dữ liệu mẫu trong Postgres (Không tự động xóa)...');
+  console.info('\nStep 1: Khởi tạo dữ liệu mẫu trong Postgres...');
 
-  // Tạo User mẫu
+  // Tạo User test
   const user = await db.user.upsert({
     where: { email: 'interactive-pipeline-tester@example.com' },
     update: {},
@@ -71,10 +75,11 @@ async function run() {
       name: 'Tester Đức Lâm',
       role: 'USER',
       status: 'ACTIVE',
+      avatarUrl: 'http://mock-cdn.realty-video.com/avatar.jpg',
     },
   });
 
-  // Tạo Project mẫu
+  // Tạo Project test
   const project = await db.project.create({
     data: {
       userId: user.id,
@@ -86,7 +91,7 @@ async function run() {
       area: 500,
       bedrooms: 4,
       bathrooms: 5,
-      salePrice: 120000000000, // 120 Tỷ
+      salePrice: 120000000000,
       amenities: ['Hồ bơi riêng', 'Sân vườn rộng', 'An ninh 24/7', 'Bến du thuyền'],
       highlights: [
         'Sổ hồng chính chủ',
@@ -112,7 +117,7 @@ async function run() {
           id: 'scene-intro',
           name: 'Mặt tiền biệt thự',
           duration: 5,
-          mediaSlots: [{ type: 'IMAGE', requiredTag: 'EXTERIOR' }],
+          mediaSlots: [{ type: 'IMAGE', requiredTag: 'LIVING_ROOM' }],
           textSlots: [{ position: 'top-left', style: 'badge' }],
         },
         {
@@ -231,87 +236,144 @@ async function run() {
     },
   });
 
-  console.info(`-> Đã khởi tạo thành công.`);
-  console.info(`   - User Email: interactive-pipeline-tester@example.com`);
-  console.info(`   - Project ID: ${project.id} (Tên: Biệt Thự Chateau Quận 7)`);
-  console.info(`   - ScriptDraft ID: ${draft.id}`);
+  console.info(`-> Khởi tạo thành công: ScriptDraft ID = ${draft.id}`);
 
-  // 2. Khởi chạy Worker thực tế
-  console.info('\nStep 2: Khởi chạy Worker BullMQ...');
+  // ----------------------------------------------------
+  // PHẦN 1: CHẠY WORKER 1 (SCRIPT GENERATION)
+  // ----------------------------------------------------
+  console.info('\nStep 2: Khởi chạy Worker 1 để tạo kịch bản nháp...');
   const { scriptGenWorker } = await import('../src/workers/script-gen.worker');
 
-  // 3. Gửi job vào queue
-  console.info('\nStep 3: Gửi Job vào BullMQ để bắt đầu pipeline...');
-  const queue = new Queue('realty.script.generate', {
-    connection: redis as any,
-  });
-  await queue.add('interactive-job', { draftId: draft.id });
+  const scriptQueue = new Queue('realty.script.generate', { connection: redis as any });
+  await scriptQueue.add('interactive-script-job', { draftId: draft.id });
 
-  // 4. Lắng nghe cập nhật
-  console.info('\nStep 4: Bắt đầu xử lý (Giải thích chi tiết tiến trình):');
-  let isDone = false;
-  let lastStep = '';
+  console.info('-> Đã gửi Job tạo kịch bản. Chờ xử lý...');
+  let draftReady = false;
+  let lastW1Step = '';
 
   for (let i = 0; i < 45; i++) {
     await new Promise((resolve) => setTimeout(resolve, 2000));
-    const currentDraft = await db.scriptDraft.findUnique({
-      where: { id: draft.id },
-    });
+    const currentDraft = await db.scriptDraft.findUnique({ where: { id: draft.id } });
 
-    if (currentDraft && currentDraft.currentStep !== lastStep) {
-      lastStep = currentDraft.currentStep || '';
-      console.info(`\n   --- CHUYỂN BƯỚC: ${lastStep} (${currentDraft.progress}%) ---`);
-      if (lastStep === 'FETCHING_DATA') {
-        console.info(
-          '   [Giải thích]: Worker đã nhận job, tải thông tin dự án, cấu hình template từ database.',
-        );
-      } else if (lastStep === 'DOWNLOADING_MEDIA') {
-        console.info(
-          '   [Giải thích]: Tiến hành tải các tệp ảnh và video của dự án về thư mục tạm cục bộ.',
-        );
-      } else if (lastStep === 'VISION_ANALYSIS') {
-        console.info(
-          '   [Giải thích]: Chạy phân tích AI Vision. Đối với ảnh, kiểm tra bố cục và chất lượng. Đối với video, dùng FFmpeg trích xuất 3 keyframes và gửi Gemini phân tích chuyển động, crop.',
-        );
-      } else if (lastStep === 'SCRIPT_GENERATION') {
-        console.info(
-          '   [Giải thích]: Gửi toàn bộ dữ liệu dự án và kết quả phân tích hình ảnh vào Gemini 2.5 Flash để dựng kịch bản chi tiết bằng tiếng Việt, gán asset phù hợp với từng cảnh.',
-        );
-      } else if (lastStep === 'SAVING_DRAFT') {
-        console.info(
-          '   [Giải thích]: Lưu kịch bản hoàn chỉnh dạng cấu trúc JSON vào bảng ScriptDraft trong database.',
-        );
-      }
+    if (currentDraft && currentDraft.currentStep !== lastW1Step) {
+      lastW1Step = currentDraft.currentStep || '';
+      console.info(`   [Worker 1 - Step]: ${lastW1Step} (${currentDraft.progress}%)`);
     }
 
-    if (currentDraft && (currentDraft.status === 'READY' || currentDraft.status === 'FAILED')) {
-      console.info(`\n================================================================`);
-      console.info(
-        `   HOÀN THÀNH: Trạng thái: ${currentDraft.status} | Tiến độ: ${currentDraft.progress}%`,
-      );
-      console.info(`================================================================`);
-      console.info('\nKịch bản chi tiết đã được cập nhật vĩnh viễn trong database.');
-      console.info('Bạn có thể mở Prisma Studio hoặc pgAdmin để xem bản ghi này.');
-      console.info(`   - Bảng: script_drafts`);
-      console.info(`   - ScriptDraft ID: ${draft.id}`);
-      isDone = true;
+    if (currentDraft && currentDraft.status === 'READY') {
+      console.info('\n✅ [Worker 1] ĐÃ TẠO XONG KỊCH BẢN CHUYÊN SÂU!');
+      console.info(`   - Tiến độ: ${currentDraft.progress}%`);
+      console.info('   - Danh sách phân cảnh chi tiết do AI sinh ra:');
+
+      const scenes = currentDraft.scenes as any[];
+      scenes.forEach((scene) => {
+        console.info(`     * Cảnh ${scene.order}: ${scene.name}`);
+        console.info(`       LỜI THOẠI: "${scene.narration}"`);
+        console.info(`       PHỤ ĐỀ:    "${scene.caption}"`);
+      });
+      draftReady = true;
+      break;
+    }
+
+    if (currentDraft && currentDraft.status === 'FAILED') {
+      console.error(`❌ Worker 1 thất bại: ${currentDraft.errorMessage}`);
       break;
     }
   }
 
-  if (!isDone) {
-    console.warn('\nTimeout: Quá thời gian chờ xử lý.');
+  await scriptQueue.close();
+  await scriptGenWorker.close();
+
+  if (!draftReady) {
+    console.error('Không thể tiếp tục vì Worker 1 thất bại hoặc quá thời gian chờ.');
+    await redis.quit();
+    await db.$disconnect();
+    process.exit(1);
   }
 
-  // Tắt kết nối (không xóa dữ liệu mẫu)
-  await queue.close();
-  await scriptGenWorker.close();
+  // ----------------------------------------------------
+  // PHẦN 2: CHẠY WORKER 2 (VIDEO RENDER)
+  // ----------------------------------------------------
+  console.info('\nStep 3: Khởi tạo VideoJob liên kết với kịch bản vừa sinh của Worker 1...');
+
+  // Tạo Wallet và cộng token
+  await db.tokenWallet.upsert({
+    where: { userId: user.id },
+    update: { balance: 10 },
+    create: { userId: user.id, balance: 10 },
+  });
+
+  const videoJob = await db.videoJob.create({
+    data: {
+      userId: user.id,
+      projectId: project.id,
+      templateId: template.id,
+      scriptDraftId: draft.id, // Sử dụng trực tiếp ScriptDraft ID sinh từ W1
+      status: 'QUEUED',
+      tokenCost: 2,
+      ttsProvider: 'fptai',
+      ttsVoiceId: 'lannhi',
+      renderEngine: 'ffmpeg',
+    },
+  });
+
+  console.info(`-> Khởi tạo VideoJob thành công: Job ID = ${videoJob.id}`);
+
+  console.info('\nStep 4: Khởi chạy Worker 2 để dựng video từ kịch bản trên...');
+  const { videoRenderWorker } = await import('../src/workers/video-render.worker');
+
+  const renderQueue = new Queue('realty.video.render', { connection: redis as any });
+  await renderQueue.add('interactive-render-job', { jobId: videoJob.id });
+
+  let renderDone = false;
+  let lastW2Step = '';
+
+  for (let i = 0; i < 90; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const currentJob = await db.videoJob.findUnique({ where: { id: videoJob.id } });
+
+    if (currentJob && currentJob.currentStep !== lastW2Step) {
+      lastW2Step = currentJob.currentStep || '';
+      console.info(`   [Worker 2 - Step]: ${lastW2Step} (${currentJob.progress}%)`);
+    }
+
+    if (currentJob && currentJob.status === 'COMPLETED') {
+      console.info(`\n✅ [Worker 2] DỰNG VIDEO THÀNH CÔNG!`);
+      console.info(`   - Video URL: ${currentJob.outputUrl}`);
+      console.info(`   - Thumbnail URL: ${currentJob.thumbnailUrl}`);
+      console.info(
+        `   - Dung lượng: ${(Number(currentJob.outputSizeBytes) / 1024 / 1024).toFixed(2)} MB`,
+      );
+      console.info(`   - Thời lượng: ${currentJob.duration} giây`);
+      renderDone = true;
+      break;
+    }
+
+    if (currentJob && currentJob.status === 'FAILED') {
+      console.error(`❌ Worker 2 thất bại: ${currentJob.errorMessage}`);
+      break;
+    }
+  }
+
+  await renderQueue.close();
+  await videoRenderWorker.close();
   await redis.quit();
   await db.$disconnect();
-  console.info('\nLưu ý: Dữ liệu mẫu vẫn được giữ nguyên trong database để bạn kiểm tra.');
-  console.info('Khi nào muốn xóa dữ liệu test này, bạn hãy yêu cầu tôi dọn dẹp.');
+
+  if (renderDone) {
+    console.info('\n================================================================');
+    console.info('   🎉 KIỂM THỬ LIÊN THÔNG E2E HOÀN TẤT THÀNH CÔNG MỸ MÃN!     ');
+    console.info('================================================================');
+    console.info('Tệp video dọc hoàn chỉnh đã được xuất ra tại thư mục:');
+    console.info(`   - [Video]:     ${path.join(TEST_ASSETS_DIR, 'output.mp4')}`);
+    console.info(`   - [Thumbnail]: ${path.join(TEST_ASSETS_DIR, 'thumbnail.jpg')}`);
+    console.info('\nBạn có thể mở xem trực quan. Để dọn dẹp dữ liệu test, hãy chạy:');
+    console.info('   pnpm test:pipeline-clean');
+  } else {
+    console.error('\nQuá trình dựng video bị lỗi hoặc quá thời gian chờ.');
+  }
 }
 
 run().catch((err) => {
-  console.error('Lỗi khi chạy thử pipeline:', err);
+  console.error('Lỗi khi chạy thử E2E liên thông:', err);
 });

@@ -16,6 +16,7 @@
     "test:orchestrator": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-orchestrator.ts",
     "test:pipeline": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-full-pipeline-interactive.ts",
     "test:render-pipeline": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-full-render-interactive.ts",
+    "test:e2e": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-e2e-connected.ts",
     "test:pipeline-clean": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/clean-interactive-test.ts",
     "test:tts-fpt": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-tts-fpt.ts",
     "test:tts-cache": "ts-node --compiler-options '{\"module\": \"commonjs\", \"moduleResolution\": \"node\"}' scripts/test-tts-cache.ts",

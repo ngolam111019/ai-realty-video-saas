@@ -51,7 +51,9 @@ export async function downloadMediaAssets(
   const mediaDir = path.join(tempDir, input.draftId, 'media');
   await fs.mkdir(mediaDir, { recursive: true });
 
-  const allAssetIds = [...input.mediaAssetIds, input.portraitAssetId].filter(Boolean) as string[];
+  const allAssetIds = Array.from(
+    new Set([...input.mediaAssetIds, input.portraitAssetId].filter(Boolean)),
+  ) as string[];
 
   if (allAssetIds.length === 0) {
     return { localMediaDir: mediaDir, assetMap: new Map() };

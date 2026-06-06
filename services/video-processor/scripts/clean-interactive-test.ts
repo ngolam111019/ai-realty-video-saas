@@ -1,6 +1,7 @@
 // services/video-processor/scripts/clean-interactive-test.ts
 import dotenv from 'dotenv';
 import * as path from 'path';
+import * as fs from 'fs';
 
 // Load env from root
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
@@ -76,6 +77,25 @@ async function run() {
     })
     .catch(() => {});
   console.info('- Đã xóa VideoTemplate kiểm thử.');
+
+  // Xóa các file kết quả kiểm thử trong test-assets
+  const testAssetsDir = path.resolve(__dirname, '../test-assets');
+  if (fs.existsSync(testAssetsDir)) {
+    const files = fs.readdirSync(testAssetsDir);
+    const originals = ['livingroom.jpg', 'bedroom.jpg', 'avatar.jpg', 'test-property.mp4'];
+    let deletedFilesCount = 0;
+    for (const file of files) {
+      if (!originals.includes(file)) {
+        try {
+          fs.unlinkSync(path.join(testAssetsDir, file));
+          deletedFilesCount++;
+        } catch (err) {
+          // ignore
+        }
+      }
+    }
+    console.info(`- Đã dọn dẹp ${deletedFilesCount} file media tạm trong test-assets.`);
+  }
 
   await db.$disconnect();
   console.info('Dọn dẹp hoàn tất cơ sở dữ liệu!');

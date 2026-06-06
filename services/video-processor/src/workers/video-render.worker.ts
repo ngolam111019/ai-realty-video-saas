@@ -144,7 +144,8 @@ export const videoRenderWorker = new Worker(
             const downloaded = assetMap.get(assigned.assetId);
             if (!downloaded) continue;
 
-            if (assigned.type === 'IMAGE' || (assigned.type as string) === 'PORTRAIT') {
+            const typeStr = assigned.type as string;
+            if (typeStr === 'IMAGE' || typeStr === 'PORTRAIT') {
               assetLocalPaths[assigned.assetId] = downloaded.localPath;
             } else {
               const localOutputPath = path.join(

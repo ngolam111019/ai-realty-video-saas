@@ -2,9 +2,11 @@
   "name": "ai-realty-video-saas-monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "AI Realty Video SaaS Monorepo",
   "scripts": {
     "dev": "pnpm --filter \"*\" run dev",
+    "dev:web": "pnpm --filter apps-web dev",
+    "dev:api": "pnpm --filter services-main-api dev",
+    "dev:processor": "pnpm --filter services-video-processor dev",
     "build": "pnpm --filter \"*\" run build",
     "test": "pnpm --filter \"*\" run test",
     "lint": "eslint \"**/*.{ts,tsx,js,jsx}\"",

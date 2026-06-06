@@ -2,7 +2,6 @@
 import dotenv from 'dotenv';
 import * as path from 'path';
 import * as fs from 'fs';
-import { analyzeImage } from '../src/processors/ai-vision-image';
 
 // Load env from root
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
@@ -32,6 +31,7 @@ async function run() {
 
   console.info(`Đang phân tích ảnh: ${absolutePath} sử dụng Gemini API...`);
   try {
+    const { analyzeImage } = await import('../src/processors/ai-vision-image');
     const result = await analyzeImage({
       assetId: 'test-asset-123',
       localImagePath: absolutePath,

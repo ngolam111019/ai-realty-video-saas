@@ -46,7 +46,7 @@ export async function analyzeImage(input: AnalyzeImageInput): Promise<ImageAnaly
   const fileBuffer = await fs.readFile(input.localImagePath);
   const base64Data = fileBuffer.toString('base64');
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   const response = await model.generateContent({
     contents: [

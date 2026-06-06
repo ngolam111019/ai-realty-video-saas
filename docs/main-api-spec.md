@@ -9,6 +9,32 @@ This document serves as the definitive specification for the NestJS API server (
 
 ---
 
+## Objectives, Scope, and Boundaries
+
+### 🎯 Objectives
+
+- **Replace the old basic Express skeleton** with a scalable NestJS-based API Gateway.
+- **Ensure transactional safety** for token deductions and refunds using database ACID transactions.
+- **Orchestrate media workflows** without blocking synchronous HTTP threads, offloading CPU-heavy tasks to the background worker (`services/video-processor`).
+- **Provide clean and robust API contracts** for the Next.js web client (`apps/web`).
+
+### 📦 Scope
+
+- **User Authentication:** Enforce session validation via guards.
+- **Project & Media CRUD:** Manage property details and handle standard file uploads (<10MB) as well as Cloudflare R2 presigned URLs (>10MB).
+- **Phase 1 Orchestration:** Enqueue and monitor script-draft generation.
+- **Phase 2 Orchestration:** Perform token balance validation, debiting, and enqueuing video render jobs.
+- **Billing Integration:** Process and verify HMAC signatures for PayOS and Stripe payment webhooks.
+
+### 🚫 Boundaries (Out of Scope)
+
+- **Direct Video Rendering:** The API will NOT execute FFmpeg or Remotion processes directly.
+- **Direct Voice Narration (TTS) generation:** The API will NOT query FPT.AI or ElevenLabs APIs directly for audio streams.
+- **AI Media Analysis:** The API will NOT call Gemini Vision models directly.
+  All of the above heavy operations are delegated to `services/video-processor` via BullMQ.
+
+---
+
 ## 1. System Topology & Data Flow
 
 The NestJS API handles all client requests, authentication, transactional token ledger operations, media meta-data tracking, and payment webhooks. It acts as an orchestrator, dispatching async tasks to the background worker (`services/video-processor`) via Redis queues.

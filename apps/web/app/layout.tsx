@@ -1,5 +1,11 @@
 import type { Metadata } from 'next';
+import { Outfit } from 'next/font/google';
 import './globals.css';
+
+const outfit = Outfit({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-outfit',
+});
 
 export const metadata: Metadata = {
   title: 'AI Realty Video SaaS',
@@ -13,7 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi">
-      <body>{children}</body>
+      <body className={`${outfit.variable} font-sans`}>{children}</body>
     </html>
   );
 }

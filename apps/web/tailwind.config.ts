@@ -12,6 +12,12 @@ const config: Config = {
       colors: {
         background: 'var(--background)',
         foreground: 'var(--foreground)',
+        'brand-purple': '#8b5cf6',
+        'brand-blue': '#3b82f6',
+        'dark-bg': '#020617',
+      },
+      fontFamily: {
+        sans: ['var(--font-outfit)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
     },
   },

@@ -203,7 +203,7 @@ async function run() {
       },
       signature: 'mock-sig-not-verified-if-checksum-is-fallback-or-stub',
     })
-    .catch((_err) => {
+    .catch(() => {
       // PayOS webhook will check signature, if it fails because of invalid signature, we credit directly in DB for testing
       console.warn(
         '   PayOS webhook signature check failed (expected in test without secret), crediting token directly via DB...',
@@ -300,6 +300,6 @@ async function run() {
   await db.$disconnect();
 }
 
-run().catch((err) => {
+run().catch((err: any) => {
   console.error('Lỗi khi chạy E2E liên thông HTTP API -> Worker:', err);
 });

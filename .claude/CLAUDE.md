@@ -107,12 +107,12 @@ All rules in `.claude/rules/` are **mandatory** and must be followed:
 
 ### Architecture & Design
 
-| Rule                   | Description                                                     |
-| ---------------------- | --------------------------------------------------------------- |
-| `tech-stack.md`        | **APPROVED** stack: Next.js, Express, PG, Redis, Prisma, BullMQ |
-| `system-design.md`     | Multi-service, queue-based, event-driven patterns               |
-| `project-structure.md` | Monorepo layered architecture                                   |
-| `api-conventions.md`   | REST standards, response envelopes                              |
+| Rule                   | Description                                                    |
+| ---------------------- | -------------------------------------------------------------- |
+| `tech-stack.md`        | **APPROVED** stack: Next.js, NestJS, PG, Redis, Prisma, BullMQ |
+| `system-design.md`     | Multi-service, queue-based, event-driven patterns              |
+| `project-structure.md` | Monorepo layered architecture                                  |
+| `api-conventions.md`   | REST standards, response envelopes                             |
 
 ### Data & Naming
 

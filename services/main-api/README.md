@@ -1,98 +1,114 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Backend API Server — `services/main-api`
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+This service is the primary API Gateway and Orchestrator for the AI Realty Video SaaS platform. It is built using the **NestJS** framework and **TypeScript**, interacting directly with the shared PostgreSQL database and dispatching asynchronous tasks to background workers via Redis queues.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## 1. Core Responsibilities
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- **API Gateway:** Serves REST API endpoints for the Next.js web client (`apps/web`).
+- **Authentication & Guards:** Enforces secure routing and extracts user context (`req.user.id`).
+- **Project & Media Management:** Manages metadata for properties, handles standard media uploads (<10MB), generates pre-signed upload URLs for large files (>10MB), and records asset links.
+- **Phase 1 Orchestration:** Initiates kịch bản nháp generation by enqueuing jobs to the `realty.script.generate` queue.
+- **Phase 2 Orchestration:** Validates user token wallets, debits template costs in atomic database transactions, and enqueues video render jobs to the `realty.video.render` queue.
+- **Billing Webhooks:** Processes PayOS and Stripe payment webhooks with HMAC/signature verification, crediting tokens in database transactions.
 
-## Project setup
+---
 
-```bash
-$ pnpm install
+## 2. Directory & Module Structure
+
+The codebase is organized into modular NestJS domains:
+
+```
+services/main-api/src/
+├── main.ts                    # Application bootstrap, CORS config, global prefix
+├── app.module.ts              # Root entry importing submodules and ConfigModule
+│
+├── auth/                      # Session Guards & authentication logic
+│   ├── auth.guard.ts          # Resolves user session or default test user
+│   └── auth.module.ts
+│
+├── prisma/                    # Shared Prisma client integration
+│   ├── prisma.service.ts      # Instantiates global @realty-video/database client
+│   └── prisma.module.ts
+│
+├── project/                   # Property CRUD, standard uploads, and presigned URLs
+│   ├── project.controller.ts
+│   ├── project.service.ts
+│   └── project.module.ts
+│
+├── script-draft/              # Phase 1: Script draft generation & polling
+│   ├── script-draft.controller.ts
+│   ├── script-draft.service.ts
+│   └── script-draft.module.ts
+│
+├── video-job/                 # Phase 2: Video render orchestration & token wallet debit
+│   ├── video-job.controller.ts
+│   ├── video-job.service.ts
+│   └── video-job.module.ts
+│
+└── billing/                   # Webhook endpoint receivers for PayOS and Stripe
+    ├── billing.controller.ts
+    ├── billing.service.ts
+    └── billing.module.ts
 ```
 
-## Compile and run the project
+---
+
+## 3. Queue Integrations (BullMQ)
+
+The API enqueues jobs to two main BullMQ queues running on Redis:
+
+| Queue Name                   | Job Name          | Data Payload                                                     | Handler Destination          |
+| :--------------------------- | :---------------- | :--------------------------------------------------------------- | :--------------------------- |
+| **`realty.script.generate`** | `generate-script` | `{ draftId, userId, projectId, templateId, mediaAssetIds, ... }` | `video-processor` (Worker 1) |
+| **`realty.video.render`**    | `render-video`    | `{ jobId, userId, draftId, ttsProvider, ttsVoiceId, ... }`       | `video-processor` (Worker 2) |
+
+---
+
+## 4. REST Endpoint Index
+
+### Projects & Media
+
+- `POST /api/projects` $\rightarrow$ Create property project
+- `GET /api/projects` $\rightarrow$ List user projects
+- `GET/PUT/DELETE /api/projects/:id` $\rightarrow$ Project details/edit/soft-delete
+- `POST /api/projects/:id/media` $\rightarrow$ Upload standard images (<10MB) directly to R2
+- `POST /api/media/presigned-url` $\rightarrow$ Generate presigned URL for direct R2 upload (>10MB)
+- `POST /api/media/confirm-upload` $\rightarrow$ Save media metadata in DB after direct upload
+
+### Script Drafts (Phase 1)
+
+- `POST /api/script-drafts` $\rightarrow$ Enqueue AI script generation
+- `GET /api/script-drafts/:id` $\rightarrow$ Poll generation status, progress, and scenes
+- `PUT /api/script-drafts/:id` $\rightarrow$ Edit scene narrations or swap assets
+
+### Video Production (Phase 2)
+
+- `POST /api/video-jobs` $\rightarrow$ Verify wallet, deduct tokens, and enqueue FFmpeg render job
+- `GET /api/video-jobs/:id/status` $\rightarrow$ Poll render progress steps and retrieve final output URL
+
+### Billing Webhooks
+
+- `POST /api/billing/payos/webhook` $\rightarrow$ Receives PayOS webhook (verifies HMAC)
+- `POST /api/billing/stripe/webhook` $\rightarrow$ Receives Stripe events (verifies signature)
+
+---
+
+## 5. Development Commands
+
+Run these commands inside the `services/main-api` workspace:
 
 ```bash
-# development
-$ pnpm run start
+# Watch mode for development
+pnpm run dev
 
-# watch mode
-$ pnpm run start:dev
+# Compile check
+pnpm run build
 
-# production mode
-$ pnpm run start:prod
+# Run unit tests
+pnpm run test
+
+# Run E2E tests
+pnpm run test:e2e
 ```
-
-## Run tests
-
-```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).

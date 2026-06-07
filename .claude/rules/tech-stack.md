@@ -19,53 +19,52 @@
  apps/admin (React + Vite SPA)  ← Internal admin dashboard
 ```
 
-> **Quyết định**: Dùng **Next.js Full-Stack** (App Router + Route Handlers) thay vì tách
-> backend riêng. Giảm complexity, ít service hơn phải maintain, deploy 1 lần lên Vercel.
-> Video-processor **vẫn tách riêng** vì BullMQ worker không chạy được trên serverless.
+> **Quyết định**: Dùng **NestJS** làm Backend API riêng biệt (`services/main-api`) thay vì tích hợp Next.js Route Handlers, giúp phân tách rõ rệt vai trò, type-safety Monorepo tốt hơn, dễ dàng scale độc lập và duy trì code sạch sẽ.
+> Video-processor chạy background worker BullMQ độc lập.
 
 ---
 
 ## 🗂️ Quick Reference — Approved Stack
 
-| Layer                  | **Lựa chọn**                   | Lý do ngắn                                                                  |
-| ---------------------- | ------------------------------ | --------------------------------------------------------------------------- |
-| **Monorepo Tool**      | **Turborepo**                  | Caching build thông minh, do Vercel làm, tích hợp Next.js hoàn hảo          |
-| **Package Manager**    | **pnpm**                       | Nhanh hơn npm/yarn, tiết kiệm disk, workspace tốt nhất                      |
-| **Language**           | **TypeScript** (strict mode)   | Type-safe toàn bộ monorepo, chia sẻ types giữa services                     |
-| **Frontend — Web App** | **Next.js 14** (App Router)    | SEO tốt, SSR/SSG, Auth middleware, Vercel deployment miễn phí               |
-| **Frontend — Admin**   | **React + Vite** (SPA)         | Admin không cần SEO, build đơn giản, phát triển nhanh                       |
-| **UI Components**      | **shadcn/ui** + Radix UI       | Không lock-in, copy code vào project, style tự do                           |
-| **Styling**            | **Tailwind CSS v3**            | Utility-first, không cần đặt tên class, team nhỏ dùng tốt                   |
-| **State Management**   | **Zustand**                    | Đơn giản, boilerplate ít, đủ cho SaaS này                                   |
-| **Data Fetching**      | **TanStack Query v5**          | Cache server state tự động, retry, loading states                           |
-| **Form**               | **React Hook Form** + Zod      | Validation nhất quán, performance tốt                                       |
-| **Backend Framework**  | **Next.js 14 Route Handlers**  | Full-stack trong 1 app, ít service hơn, deploy Vercel cùng lúc với frontend |
-| **Validation**         | **Zod**                        | Schema validate + type inference, dùng chung với frontend                   |
-| **Database**           | **PostgreSQL 16**              | ACID, JSONB, FTS, production-proven                                         |
-| **ORM**                | **Prisma**                     | DX tốt nhất cho TypeScript, migration an toàn, Prisma Studio                |
-| **Cache**              | **Redis** (ioredis)            | Sub-ms latency, BullMQ cần Redis, rate limiting                             |
-| **Queue**              | **BullMQ**                     | Redis-backed, retry/backoff tự động, dashboard có sẵn                       |
-| **Auth**               | **Better Auth**                | Thư viện mới nhất 2024, TypeScript-first, thay thế NextAuth v5              |
-| **File Storage**       | **Cloudflare R2**              | Không tốn phí egress bandwidth (S3 charge egress), CDN tích hợp             |
-| **CDN**                | **Cloudflare**                 | Miễn phí cho R2, DDoS protection, toàn cầu                                  |
-| **Email**              | **Resend**                     | Developer-friendly, React Email templates, rẻ                               |
-| **AI — Script Gen**    | **Google Gemini 1.5 Pro**      | Rẻ nhất trong cùng chất lượng, hiểu tiếng Việt tốt, context window lớn      |
-| **AI — TTS**           | **ElevenLabs**                 | Giọng đọc tự nhiên nhất, hỗ trợ tiếng Việt, API đơn giản                    |
-| **Video Rendering**    | **Remotion v4**                | Templates bằng React/TypeScript, animation mượt, output MP4 chất lượng      |
-| **Video Encode**       | **FFmpeg** (via child_process) | Stitch scenes + mux audio sau khi Remotion render                           |
-| **Payment — VN**       | **PayOS** (primary)            | Momo/VNPay/ZaloPay/banking — 90% user VN dùng                               |
-| **Payment — Quốc tế**  | **Stripe** (secondary)         | Card quốc tế, subscription management                                       |
-| **Search**             | **PostgreSQL FTS**             | Đủ dùng cho MVP, không cần Elasticsearch                                    |
-| **Error Tracking**     | **Sentry**                     | Catch lỗi production tự động, stack trace rõ ràng                           |
-| **Monitoring**         | **Grafana + Prometheus**       | Metrics infrastructure, video queue depth                                   |
-| **Logging**            | **Pino**                       | Structured JSON logs, nhanh nhất trong Node.js                              |
-| **Testing**            | **Vitest** + Testing Library   | Tương thích Vite, nhanh hơn Jest, API giống nhau                            |
-| **E2E Testing**        | **Playwright**                 | Cross-browser, reliable hơn Cypress                                         |
-| **CI/CD**              | **GitHub Actions**             | Tích hợp tốt, free cho repo private với limits                              |
-| **Container**          | **Docker** + Docker Compose    | Local dev: PG + Redis + MinIO                                               |
-| **Deploy — Web**       | **Vercel**                     | Next.js tối ưu, preview URLs, Edge Network                                  |
-| **Deploy — Services**  | **Railway**                    | Đơn giản nhất, auto-deploy từ GitHub, giá hợp lý                            |
-| **API Docs**           | **Scalar** + OpenAPI 3.0       | UI đẹp hơn Swagger UI, tích hợp Hono.js tốt                                 |
+| Layer                  | **Lựa chọn**                   | Lý do ngắn                                                              |
+| ---------------------- | ------------------------------ | ----------------------------------------------------------------------- |
+| **Monorepo Tool**      | **Turborepo**                  | Caching build thông minh, do Vercel làm, tích hợp Next.js hoàn hảo      |
+| **Package Manager**    | **pnpm**                       | Nhanh hơn npm/yarn, tiết kiệm disk, workspace tốt nhất                  |
+| **Language**           | **TypeScript** (strict mode)   | Type-safe toàn bộ monorepo, chia sẻ types giữa services                 |
+| **Frontend — Web App** | **Next.js 14** (App Router)    | SEO tốt, SSR/SSG, Auth middleware, Vercel deployment miễn phí           |
+| **Frontend — Admin**   | **React + Vite** (SPA)         | Admin không cần SEO, build đơn giản, phát triển nhanh                   |
+| **UI Components**      | **shadcn/ui** + Radix UI       | Không lock-in, copy code vào project, style tự do                       |
+| **Styling**            | **Tailwind CSS v3**            | Utility-first, không cần đặt tên class, team nhỏ dùng tốt               |
+| **State Management**   | **Zustand**                    | Đơn giản, boilerplate ít, đủ cho SaaS này                               |
+| **Data Fetching**      | **TanStack Query v5**          | Cache server state tự động, retry, loading states                       |
+| **Form**               | **React Hook Form** + Zod      | Validation nhất quán, performance tốt                                   |
+| **Backend Framework**  | **NestJS** (TypeScript)        | Dependency Injection chuẩn chỉnh, phân tách Module rõ ràng, bảo trì tốt |
+| **Validation**         | **Zod**                        | Schema validate + type inference, dùng chung với frontend               |
+| **Database**           | **PostgreSQL 16**              | ACID, JSONB, FTS, production-proven                                     |
+| **ORM**                | **Prisma**                     | DX tốt nhất cho TypeScript, migration an toàn, Prisma Studio            |
+| **Cache**              | **Redis** (ioredis)            | Sub-ms latency, BullMQ cần Redis, rate limiting                         |
+| **Queue**              | **BullMQ**                     | Redis-backed, retry/backoff tự động, dashboard có sẵn                   |
+| **Auth**               | **Better Auth**                | Thư viện mới nhất 2024, TypeScript-first, thay thế NextAuth v5          |
+| **File Storage**       | **Cloudflare R2**              | Không tốn phí egress bandwidth (S3 charge egress), CDN tích hợp         |
+| **CDN**                | **Cloudflare**                 | Miễn phí cho R2, DDoS protection, toàn cầu                              |
+| **Email**              | **Resend**                     | Developer-friendly, React Email templates, rẻ                           |
+| **AI — Script Gen**    | **Google Gemini 1.5 Pro**      | Rẻ nhất trong cùng chất lượng, hiểu tiếng Việt tốt, context window lớn  |
+| **AI — TTS**           | **ElevenLabs**                 | Giọng đọc tự nhiên nhất, hỗ trợ tiếng Việt, API đơn giản                |
+| **Video Rendering**    | **Remotion v4**                | Templates bằng React/TypeScript, animation mượt, output MP4 chất lượng  |
+| **Video Encode**       | **FFmpeg** (via child_process) | Stitch scenes + mux audio sau khi Remotion render                       |
+| **Payment — VN**       | **PayOS** (primary)            | Momo/VNPay/ZaloPay/banking — 90% user VN dùng                           |
+| **Payment — Quốc tế**  | **Stripe** (secondary)         | Card quốc tế, subscription management                                   |
+| **Search**             | **PostgreSQL FTS**             | Đủ dùng cho MVP, không cần Elasticsearch                                |
+| **Error Tracking**     | **Sentry**                     | Catch lỗi production tự động, stack trace rõ ràng                       |
+| **Monitoring**         | **Grafana + Prometheus**       | Metrics infrastructure, video queue depth                               |
+| **Logging**            | **Pino**                       | Structured JSON logs, nhanh nhất trong Node.js                          |
+| **Testing**            | **Vitest** + Testing Library   | Tương thích Vite, nhanh hơn Jest, API giống nhau                        |
+| **E2E Testing**        | **Playwright**                 | Cross-browser, reliable hơn Cypress                                     |
+| **CI/CD**              | **GitHub Actions**             | Tích hợp tốt, free cho repo private với limits                          |
+| **Container**          | **Docker** + Docker Compose    | Local dev: PG + Redis + MinIO                                           |
+| **Deploy — Web**       | **Vercel**                     | Next.js tối ưu, preview URLs, Edge Network                              |
+| **Deploy — Services**  | **Railway**                    | Đơn giản nhất, auto-deploy từ GitHub, giá hợp lý                        |
+| **API Docs**           | **Scalar** + OpenAPI 3.0       | UI đẹp hơn Swagger UI, tích hợp Hono.js tốt                             |
 
 ---
 

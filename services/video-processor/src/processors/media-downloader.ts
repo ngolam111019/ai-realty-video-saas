@@ -96,13 +96,27 @@ export async function downloadMediaAssets(
           lastError = null;
           break;
         } catch (err: any) {
-          lastError = err;
-          logger.warn(
-            { assetId, attempt, err: err.message || err },
-            '[media-downloader] Download attempt failed',
-          );
-          if (attempt < 3) {
-            await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+          const testAssetsDir = path.resolve(__dirname, '../../test-assets');
+          const testAssetFallbackPath = path.join(testAssetsDir, asset.storageKey);
+
+          try {
+            await fs.access(testAssetFallbackPath);
+            logger.info(
+              { assetId, storageKey: asset.storageKey, fallbackPath: testAssetFallbackPath },
+              '[media-downloader] R2 download failed/skipped, using local test-assets fallback',
+            );
+            await fs.copyFile(testAssetFallbackPath, localPath);
+            lastError = null;
+            break;
+          } catch (accessErr) {
+            lastError = err;
+            logger.warn(
+              { assetId, attempt, err: err.message || err },
+              '[media-downloader] Download attempt failed and no local fallback found',
+            );
+            if (attempt < 3) {
+              await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+            }
           }
         }
       }

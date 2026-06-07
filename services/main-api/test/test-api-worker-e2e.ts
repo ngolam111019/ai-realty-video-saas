@@ -3,8 +3,11 @@ import axios from 'axios';
 import * as path from 'path';
 import * as fs from 'fs';
 import dotenv from 'dotenv';
+import { PrismaClient } from '@realty-video/database';
 
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+
+const db = new PrismaClient();
 
 const API_BASE = 'http://localhost:3001/api';
 const TEST_ASSETS_DIR = path.resolve(
@@ -48,6 +51,19 @@ async function run() {
   }
 
   // 1. Tạo User và ví trực tiếp bằng DB client nếu cần, hoặc chạy webhook để test ví tiền.
+  console.info('-> Đang đảm bảo user e2e-api-worker-tester-id tồn tại...');
+  await db.user.upsert({
+    where: { id: 'e2e-api-worker-tester-id' },
+    update: {},
+    create: {
+      id: 'e2e-api-worker-tester-id',
+      email: 'e2e-tester@example.com',
+      name: 'E2E Tester User',
+      role: 'USER',
+      status: 'ACTIVE',
+    },
+  });
+
   // Nhập thông tin và tạo project thông qua HTTP API
   console.info('\n1. Tạo dự án mới qua HTTP POST /projects...');
   const projectResp = await client.post('/projects', {
@@ -129,7 +145,6 @@ async function run() {
     '\n3. Yêu cầu sinh kịch bản nháp qua HTTP POST /script-drafts...',
   );
   // Tìm video template mẫu
-  const { db } = await import('../../video-processor/src/lib/db');
   let template = await db.videoTemplate.findFirst({
     where: { slug: 'chateau-villa-tour' },
   });

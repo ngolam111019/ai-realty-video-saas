@@ -111,4 +111,7 @@ pnpm run test
 
 # Run E2E tests
 pnpm run test:e2e
+
+# Run E2E connected API-to-Worker integration test (requires Redis/Postgres & worker running)
+pnpm run test:e2e-connected
 ```

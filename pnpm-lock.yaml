@@ -150,11 +150,14 @@ importers:
         specifier: ^1.4.11
         version: 1.4.13
       '@types/node':
-        specifier: ^24.0.0
+        specifier: ^24.13.0
         version: 24.13.0
       '@types/supertest':
         specifier: ^7.0.0
         version: 7.2.0
+      axios:
+        specifier: ^1.17.0
+        version: 1.17.0
       eslint:
         specifier: ^9.18.0
         version: 9.39.4(jiti@1.21.7)

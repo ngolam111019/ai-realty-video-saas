@@ -1,10 +1,7 @@
-// services/video-processor/src/index.ts
-import dotenv from 'dotenv';
+import './lib/env';
 import { logger } from './lib/logger';
 import { scriptGenWorker } from './workers/script-gen.worker';
 import { videoRenderWorker } from './workers/video-render.worker';
-
-dotenv.config();
 
 logger.info('[video-processor] Workers starting up...');
 

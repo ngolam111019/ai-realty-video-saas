@@ -87,7 +87,7 @@ export const videoRenderWorker = new Worker(
       const portraitAsset = project.mediaAssets.find((a) => a.type === 'PORTRAIT');
 
       const { localMediaDir, assetMap } = await downloadMediaAssets({
-        draftId: draft.id,
+        draftId: jobId,
         mediaAssetIds,
         portraitAssetId: portraitAsset?.id,
       });
@@ -199,13 +199,39 @@ export const videoRenderWorker = new Worker(
         jobId,
       });
 
+      let finalVideoUrl = uploadResult.videoUrl;
+      let finalThumbnailUrl = uploadResult.thumbnailUrl;
+
+      if (uploadResult.videoUrl.startsWith('file://')) {
+        const persistentDir = '/tmp/realty-videos';
+        await fsPromises.mkdir(persistentDir, { recursive: true });
+
+        const persistentVideoPath = path.join(persistentDir, `${jobId}.mp4`);
+        await fsPromises.copyFile(renderResult.outputPath, persistentVideoPath);
+        finalVideoUrl = `file://${persistentVideoPath}`;
+
+        const localThumbPath = path.join(tempJobDir, 'thumbnail.jpg');
+        try {
+          const persistentThumbPath = path.join(persistentDir, `${jobId}-thumb.jpg`);
+          await fsPromises.copyFile(localThumbPath, persistentThumbPath);
+          finalThumbnailUrl = `file://${persistentThumbPath}`;
+        } catch (thumbErr) {
+          // ignore if thumbnail doesn't exist
+        }
+
+        logger.info(
+          { jobId, finalVideoUrl, finalThumbnailUrl },
+          '[video-render-worker] Copied local fallback video and thumbnail to persistent dir',
+        );
+      }
+
       // Step 8: Update Job Success
       await db.videoJob.update({
         where: { id: jobId },
         data: {
           status: 'COMPLETED',
-          outputUrl: uploadResult.videoUrl,
-          thumbnailUrl: uploadResult.thumbnailUrl,
+          outputUrl: finalVideoUrl,
+          thumbnailUrl: finalThumbnailUrl,
           outputKey: uploadResult.videoKey,
           outputSizeBytes: uploadResult.fileSizeBytes,
           duration: renderResult.durationSeconds,
@@ -219,8 +245,8 @@ export const videoRenderWorker = new Worker(
         `realty:v1:job:${jobId}:completed`,
         JSON.stringify({
           jobId,
-          outputUrl: uploadResult.videoUrl,
-          thumbnailUrl: uploadResult.thumbnailUrl,
+          outputUrl: finalVideoUrl,
+          thumbnailUrl: finalThumbnailUrl,
         }),
       );
 

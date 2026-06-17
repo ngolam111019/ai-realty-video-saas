@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Sparkles,
   Save,
@@ -10,6 +10,8 @@ import {
   Video,
   CheckCircle2,
   MessageSquare,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -35,6 +37,8 @@ interface ScriptEditorProps {
   onNext: (jobId: string) => void;
 }
 
+type DraftStatus = 'PROCESSING' | 'READY' | 'FAILED' | 'idle';
+
 export default function ScriptEditor({
   projectId,
   draftId,
@@ -45,54 +49,142 @@ export default function ScriptEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [draftStatus, setDraftStatus] = useState<DraftStatus>('idle');
+  const [draftTitle, setDraftTitle] = useState<string>('');
+  const [pollingError, setPollingError] = useState<string | null>(null);
 
-  // Load default/mock scenes or fetch from api
+  // Ref để dừng polling khi component unmount
+  const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (pollingRef.current) clearTimeout(pollingRef.current);
+    };
+  }, []);
+
+  // Hàm parse scenes từ response data của API
+  const parseScenesFromDraft = (data: Record<string, unknown>): Scene[] | null => {
+    if (!data.scenes) return null;
+    const rawScenes = data.scenes as Array<Record<string, unknown>>;
+    if (!Array.isArray(rawScenes) || rawScenes.length === 0) return null;
+
+    return rawScenes.map((s, idx) => ({
+      id: String(s.id || `scene-${idx + 1}`),
+      order: Number(s.order || idx + 1),
+      narration: String(s.narration || ''),
+      caption: String(s.caption || ''),
+      assignedAssetId:
+        s.assignedAssetId
+          ? String(s.assignedAssetId)
+          : uploadedAssets[idx]?.id || uploadedAssets[0]?.id || undefined,
+    }));
+  };
+
+  // Hàm load draft và khởi động poll nếu cần
   useEffect(() => {
     async function loadDraft() {
+      // Nếu là mock draftId, dùng data mẫu ngay
+      if (!draftId || draftId === 'mock') {
+        setDraftStatus('READY');
+        setScenes(buildMockScenes());
+        return;
+      }
+
+      // Fetch draft lần đầu
       try {
-        if (draftId && draftId !== 'mock') {
-          const res = await api.get(`/script-drafts/${draftId}`);
-          if (res.data && res.data.data && res.data.data.scenes) {
-            setScenes(res.data.data.scenes);
-            return;
-          }
+        const res = await api.get(`/script-drafts/${draftId}`);
+        if (!isMountedRef.current) return;
+
+        const data = res.data?.data || res.data;
+        const status: DraftStatus = (data.status as DraftStatus) || 'PROCESSING';
+        setDraftStatus(status);
+        if (data.title) setDraftTitle(data.title);
+
+        if (status === 'READY') {
+          const parsed = parseScenesFromDraft(data);
+          setScenes(parsed && parsed.length > 0 ? parsed : buildMockScenes());
+        } else if (status === 'FAILED') {
+          setPollingError(data.errorMessage || 'AI không thể tạo kịch bản. Vui lòng thử lại.');
+          setScenes(buildMockScenes());
+        } else {
+          // PROCESSING → bắt đầu poll
+          startPolling(draftId);
         }
       } catch (err) {
         console.error('Lỗi khi tải kịch bản nháp từ API:', err);
+        if (isMountedRef.current) {
+          setDraftStatus('READY');
+          setScenes(buildMockScenes());
+        }
       }
-
-      // Fallback/Mock data:
-      const defaultScenes: Scene[] = [
-        {
-          id: 'scene-1',
-          order: 1,
-          narration:
-            'Chào mừng các bạn đến với căn hộ cao cấp Vinhomes Golden River. Nơi mang lại trải nghiệm sống đẳng cấp bậc nhất Sài Gòn.',
-          caption: 'Chào mừng đến với Vinhomes Golden River 🌟',
-          assignedAssetId: uploadedAssets[0]?.id || undefined,
-        },
-        {
-          id: 'scene-2',
-          order: 2,
-          narration:
-            'Không gian phòng khách được thiết kế mở, đón trọn ánh sáng tự nhiên cùng tầm nhìn triệu đô hướng ra sông Sài Gòn.',
-          caption: 'Phòng khách mở đón nắng tự nhiên & view sông 🏙️',
-          assignedAssetId: uploadedAssets[1]?.id || uploadedAssets[0]?.id || undefined,
-        },
-        {
-          id: 'scene-3',
-          order: 3,
-          narration:
-            'Phòng ngủ master sang trọng, mang phong cách hiện đại với nội thất nhập khẩu cao cấp từ Châu Âu.',
-          caption: 'Phòng ngủ Master phong cách Châu Âu 🛌',
-          assignedAssetId: uploadedAssets[2]?.id || uploadedAssets[0]?.id || undefined,
-        },
-      ];
-      setScenes(defaultScenes);
     }
 
     loadDraft();
-  }, [draftId, uploadedAssets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId]);
+
+  const startPolling = (id: string) => {
+    const poll = async () => {
+      if (!isMountedRef.current) return;
+      try {
+        const res = await api.get(`/script-drafts/${id}`);
+        if (!isMountedRef.current) return;
+
+        const data = res.data?.data || res.data;
+        const status: DraftStatus = (data.status as DraftStatus) || 'PROCESSING';
+        setDraftStatus(status);
+        if (data.title) setDraftTitle(data.title);
+
+        if (status === 'READY') {
+          const parsed = parseScenesFromDraft(data);
+          setScenes(parsed && parsed.length > 0 ? parsed : buildMockScenes());
+        } else if (status === 'FAILED') {
+          setPollingError(data.errorMessage || 'AI không thể tạo kịch bản. Vui lòng thử lại.');
+          setScenes(buildMockScenes());
+        } else {
+          // Tiếp tục poll sau 3 giây
+          pollingRef.current = setTimeout(poll, 3000);
+        }
+      } catch {
+        if (isMountedRef.current) {
+          // Retry sau 5 giây nếu network error
+          pollingRef.current = setTimeout(poll, 5000);
+        }
+      }
+    };
+
+    pollingRef.current = setTimeout(poll, 3000);
+  };
+
+  const buildMockScenes = (): Scene[] => [
+    {
+      id: 'scene-1',
+      order: 1,
+      narration:
+        'Chào mừng các bạn đến với căn hộ cao cấp Vinhomes Golden River. Nơi mang lại trải nghiệm sống đẳng cấp bậc nhất Sài Gòn.',
+      caption: 'Chào mừng đến với Vinhomes Golden River 🌟',
+      assignedAssetId: uploadedAssets[0]?.id || undefined,
+    },
+    {
+      id: 'scene-2',
+      order: 2,
+      narration:
+        'Không gian phòng khách được thiết kế mở, đón trọn ánh sáng tự nhiên cùng tầm nhìn triệu đô hướng ra sông Sài Gòn.',
+      caption: 'Phòng khách mở đón nắng tự nhiên & view sông 🏙️',
+      assignedAssetId: uploadedAssets[1]?.id || uploadedAssets[0]?.id || undefined,
+    },
+    {
+      id: 'scene-3',
+      order: 3,
+      narration:
+        'Phòng ngủ master sang trọng, mang phong cách hiện đại với nội thất nhập khẩu cao cấp từ Châu Âu.',
+      caption: 'Phòng ngủ Master phong cách Châu Âu 🛌',
+      assignedAssetId: uploadedAssets[2]?.id || uploadedAssets[0]?.id || undefined,
+    },
+  ];
 
   const handleUpdateScene = (id: string, fields: Partial<Scene>) => {
     setScenes((prev) => prev.map((scene) => (scene.id === id ? { ...scene, ...fields } : scene)));
@@ -147,6 +239,61 @@ export default function ScriptEditor({
     }
   };
 
+  // ── Trạng thái: AI đang xử lý ──
+  if (draftStatus === 'PROCESSING') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-6 py-12">
+        <div className="relative">
+          <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-purple-600/20 to-blue-600/20 border border-purple-500/20 flex items-center justify-center">
+            <Sparkles size={36} className="text-purple-400 animate-pulse" />
+          </div>
+          <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center">
+            <Loader2 size={14} className="text-white animate-spin" />
+          </div>
+        </div>
+        <div className="text-center space-y-2 max-w-sm">
+          <h3 className="text-lg font-bold text-slate-100">
+            AI đang phân tích & viết kịch bản...
+          </h3>
+          <p className="text-xs text-slate-400">
+            AI đang đọc thông tin bất động sản của bạn và tạo lời thuyết minh phù hợp.
+            Thường mất 15–60 giây.
+          </p>
+        </div>
+        {/* Animated progress bar */}
+        <div className="w-64 h-1.5 bg-slate-900 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-purple-600 to-blue-600 rounded-full animate-[pulse_1.5s_ease-in-out_infinite] w-3/4" />
+        </div>
+        <p className="text-[10px] text-slate-600 font-medium">Tự động cập nhật khi xong...</p>
+      </div>
+    );
+  }
+
+  // ── Trạng thái: AI thất bại ──
+  if (draftStatus === 'FAILED' && pollingError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[30vh] space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+          <AlertCircle size={28} className="text-red-400" />
+        </div>
+        <div className="text-center space-y-1">
+          <h3 className="text-base font-bold text-slate-100">AI không thể tạo kịch bản</h3>
+          <p className="text-xs text-slate-400">{pollingError}</p>
+        </div>
+        <button
+          onClick={() => {
+            setDraftStatus('READY');
+            setPollingError(null);
+            setScenes(buildMockScenes());
+          }}
+          className="px-4 py-2 rounded-xl border border-slate-800 bg-slate-900/60 text-slate-300 text-xs font-semibold hover:bg-slate-900 transition-all"
+        >
+          Dùng kịch bản mẫu để tiếp tục
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Top action bar */}
@@ -157,6 +304,9 @@ export default function ScriptEditor({
             Biên Tập Phân Cảnh & Lời Thoại AI
           </h2>
           <p className="text-slate-400 text-xs font-medium">
+            {draftTitle && (
+              <span className="text-purple-400 font-semibold mr-2">"{draftTitle}"</span>
+            )}
             AI đã tạo sẵn kịch bản thô. Bạn có thể tinh chỉnh lời thoại, phụ đề và chỉ định hình ảnh
             phù hợp.
           </p>
@@ -173,7 +323,7 @@ export default function ScriptEditor({
             ) : (
               <Save size={14} />
             )}
-            {saveStatus === 'success' ? 'Đã lưu!' : 'Lưu nháp'}
+            {saveStatus === 'success' ? 'Đã lưu!' : saveStatus === 'error' ? 'Lỗi lưu!' : 'Lưu nháp'}
           </button>
 
           <button
@@ -258,7 +408,7 @@ export default function ScriptEditor({
                         <Image size={24} className="text-purple-400 mb-1" />
                       )}
                       <span className="text-[10px] font-bold text-slate-200 truncate w-full text-center">
-                        {uploadedAssets.find((a) => a.id === scene.assignedAssetId)?.name}
+                        {uploadedAssets.find((a) => a.id === scene.assignedAssetId)?.name || 'Asset'}
                       </span>
                     </div>
                   ) : (

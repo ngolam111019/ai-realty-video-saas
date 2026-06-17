@@ -21,6 +21,8 @@ interface Project {
   status: 'READY' | 'RENDERING' | 'COMPLETED' | 'FAILED';
   createdAt: string;
   thumbnailUrl?: string;
+  latestJobId?: string | null;
+  latestDraftId?: string | null;
 }
 
 export default function ProjectsPage() {
@@ -170,7 +172,13 @@ export default function ProjectsPage() {
           {projects.map((project) => (
             <Link
               key={project.id}
-              href={`/dashboard/projects/${project.id}/wizard`}
+              href={
+                project.status === 'COMPLETED' || project.status === 'RENDERING'
+                  ? `/dashboard/projects/${project.id}/wizard?step=3&jobId=${project.latestJobId}`
+                  : project.status === 'READY' && project.latestDraftId
+                    ? `/dashboard/projects/${project.id}/wizard?step=2&draftId=${project.latestDraftId}`
+                    : `/dashboard/projects/${project.id}/wizard`
+              }
               className="group rounded-2xl border border-slate-900 bg-slate-950/20 hover:border-slate-800 transition-all duration-300 overflow-hidden flex flex-col justify-between"
             >
               {/* Image Preview Block */}

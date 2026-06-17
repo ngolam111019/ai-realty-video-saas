@@ -22,6 +22,7 @@ export default function DashboardPage() {
       const response = await api.post('/projects', {
         name: 'Dự án tạo từ Prompt',
         prompt: prompt,
+        propertyType: 'APARTMENT',
       });
 
       const newProject = response.data;
@@ -41,9 +42,25 @@ export default function DashboardPage() {
     }
   };
 
-  const handleToolClick = (toolType: string) => {
-    const mockProjectId = 'mock-' + Math.random().toString(36).substring(2, 9);
-    router.push(`/dashboard/projects/${mockProjectId}/wizard?tool=${toolType}`);
+  const handleToolClick = async (toolType: string) => {
+    setIsLoading(true);
+    try {
+      // Tạo project mới với tên tạm thời, wizard sẽ cho phép user cập nhật
+      const response = await api.post('/projects', {
+        name: 'Dự án BĐS mới',
+        propertyType: 'APARTMENT',
+      });
+      const newProject = response.data;
+      setActiveProject(newProject);
+      router.push(`/dashboard/projects/${newProject.id}/wizard?tool=${toolType}`);
+    } catch (error) {
+      console.error('Lỗi khi tạo dự án:', error);
+      // Fallback demo nếu backend api chưa kết nối
+      const mockProjectId = 'mock-' + Math.random().toString(36).substring(2, 9);
+      router.push(`/dashboard/projects/${mockProjectId}/wizard?tool=${toolType}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const toolCards = [

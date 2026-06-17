@@ -16,7 +16,8 @@ export class VideoJobService {
   ) {}
 
   async createVideoJob(userId: string, data: any) {
-    const { scriptDraftId, ttsProvider, ttsVoiceId, renderEngine } = data;
+    const scriptDraftId = data.scriptDraftId || data.draftId;
+    const { ttsProvider, ttsVoiceId, renderEngine } = data;
 
     // Fetch ScriptDraft and video template to check token cost
     const draft = await this.prisma.scriptDraft.findFirst({
@@ -25,6 +26,46 @@ export class VideoJobService {
     });
     if (!draft) {
       throw new NotFoundException('Script draft not found');
+    }
+
+    // Map and save client-submitted scenes to the ScriptDraft
+    if (data.scenes && Array.isArray(data.scenes)) {
+      const projectAssets = await this.prisma.mediaAsset.findMany({
+        where: { projectId: draft.projectId },
+      });
+      const assetTypeMap = new Map(projectAssets.map((a) => [a.id, a.type]));
+
+      const mappedScenes = data.scenes.map((s: any) => {
+        const assetId = s.assetId || s.assignedAssetId;
+        const type = assetId ? (assetTypeMap.get(assetId) === 'VIDEO_CLIP' ? 'VIDEO_CLIP' : 'IMAGE') : 'IMAGE';
+
+        return {
+          id: s.id || `scene-${s.order}`,
+          order: s.order,
+          narration: s.narration,
+          caption: s.caption,
+          assignedAssets: assetId
+            ? [
+                {
+                  assetId,
+                  type,
+                  detectedRoom: 'OTHER',
+                  quality: 'excellent',
+                  assignmentReason: 'User assigned',
+                },
+              ]
+            : [],
+          textOverlays: [],
+        };
+      });
+
+      await this.prisma.scriptDraft.update({
+        where: { id: scriptDraftId },
+        data: {
+          scenes: mappedScenes as any,
+          status: 'READY',
+        },
+      });
     }
 
     const template = draft.template;
@@ -55,10 +96,10 @@ export class VideoJobService {
         // Create Video Job
         const job = await tx.videoJob.create({
           data: {
-            userId,
-            projectId: draft.projectId,
-            templateId: draft.templateId,
-            scriptDraftId,
+            user: { connect: { id: userId } },
+            project: { connect: { id: draft.projectId } },
+            template: { connect: { id: draft.templateId } },
+            scriptDraft: { connect: { id: scriptDraftId } },
             status: 'QUEUED',
             tokenCost,
             ttsProvider: ttsProvider || 'fptai',
@@ -72,13 +113,13 @@ export class VideoJobService {
         // Create Transaction record
         await tx.transaction.create({
           data: {
-            userId,
+            user: { connect: { id: userId } },
             type: 'TOKEN_DEDUCT',
             status: 'COMPLETED',
             tokenAmount: -tokenCost,
             balanceBefore: balance,
             balanceAfter: balance - tokenCost,
-            videoJobId: job.id,
+            videoJob: { connect: { id: job.id } },
             description: `Trừ token tạo video cho dự án qua template: ${template.name}`,
           },
         });
@@ -125,6 +166,15 @@ export class VideoJobService {
       throw new NotFoundException('Video job not found');
     }
 
+    let outputUrl = job.outputUrl;
+    let thumbnailUrl = job.thumbnailUrl;
+    if (outputUrl && outputUrl.startsWith('file://')) {
+      outputUrl = `http://localhost:3001/api/video-jobs/${job.id}/video`;
+    }
+    if (thumbnailUrl && thumbnailUrl.startsWith('file://')) {
+      thumbnailUrl = `http://localhost:3001/api/video-jobs/${job.id}/thumbnail`;
+    }
+
     return {
       jobId: job.id,
       status: job.status,
@@ -135,8 +185,8 @@ export class VideoJobService {
         (job.status === 'COMPLETED'
           ? 'Dựng video thành công'
           : 'Đang xử lý...'),
-      outputUrl: job.outputUrl,
-      thumbnailUrl: job.thumbnailUrl,
+      outputUrl,
+      thumbnailUrl,
       duration: job.duration ? Number(job.duration) : null,
     };
   }

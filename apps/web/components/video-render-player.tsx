@@ -47,7 +47,8 @@ export default function VideoRenderPlayer({
         }
 
         const res = await api.get(`/video-jobs/${jobId}/status`);
-        const { status: jobStatus, progress, videoUrl: url, error } = res.data.data;
+        const { status: jobStatus, progress, videoUrl, outputUrl, error } = res.data.data;
+        const url = videoUrl || outputUrl;
 
         setStatus(jobStatus);
         setPercent(progress || 0);

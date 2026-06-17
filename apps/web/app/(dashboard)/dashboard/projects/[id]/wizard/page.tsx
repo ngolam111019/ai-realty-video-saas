@@ -28,6 +28,9 @@ interface Asset {
   size?: number;
 }
 
+// Key để lưu assets vào sessionStorage khi chuyển bước
+const getAssetsSessionKey = (projectId: string) => `wizard_assets_${projectId}`;
+
 export default function ProjectWizardPage() {
   const router = useRouter();
   const params = useParams();
@@ -42,6 +45,8 @@ export default function ProjectWizardPage() {
   const [uploadedAssets, setUploadedAssets] = useState<Asset[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingProject, setIsLoadingProject] = useState(true);
+  // Lưu projectId thật sau khi tạo (nếu ban đầu là mock-)
+  const [realProjectId, setRealProjectId] = useState<string>(projectId);
 
   const {
     register,
@@ -62,23 +67,46 @@ export default function ProjectWizardPage() {
   // Load project information and existing media assets
   useEffect(() => {
     async function fetchProject() {
+      // Nếu là mock-ID → không fetch, nhưng vẫn check sessionStorage
       if (projectId.startsWith('mock-')) {
+        setRealProjectId(projectId); // tạm thời, sẽ được gán lại khi submit
         setIsLoadingProject(false);
         return;
       }
+
+      // Nếu đang ở Step 2+, khôi phục assets từ sessionStorage
+      if (currentStep !== '1') {
+        const stored = sessionStorage.getItem(getAssetsSessionKey(projectId));
+        if (stored) {
+          try {
+            setUploadedAssets(JSON.parse(stored));
+          } catch {
+            // ignore parse error
+          }
+        }
+      }
+
       try {
         const res = await api.get(`/projects/${projectId}`);
         if (res.data) {
           const project = res.data;
           if (project.name) setValue('name', project.name);
-          if (project.propertyType) setValue('propertyType', project.propertyType);
+          if (project.propertyType) setValue('propertyType', project.propertyType.toLowerCase());
           if (project.address) setValue('address', project.address);
-          if (project.price) setValue('price', String(project.price));
+          if (project.salePrice) setValue('price', String(project.salePrice));
           if (project.description) setValue('description', project.description);
-          if (project.assets) {
-            setUploadedAssets(project.assets);
+          if (project.mediaAssets && project.mediaAssets.length > 0) {
+            setUploadedAssets(
+              project.mediaAssets.map((a: Record<string, unknown>) => ({
+                id: String(a.id || ''),
+                name: String(a.fileName || 'file'),
+                mimeType: String(a.mimeType || 'image/png'),
+                size: Number(a.fileSize || 0),
+              })),
+            );
           }
         }
+        setRealProjectId(projectId);
       } catch (err) {
         console.warn('Lấy thông tin dự án lỗi hoặc chưa có backend, sử dụng dữ liệu trống.', err);
       } finally {
@@ -87,14 +115,14 @@ export default function ProjectWizardPage() {
     }
 
     fetchProject();
-  }, [projectId, setValue]);
+  }, [projectId, setValue, currentStep]);
 
   const handleUploadComplete = (newAssets: Array<Record<string, unknown>>) => {
     const formatted = newAssets.map((a) => ({
       id: String(a.id || ''),
-      name: String(a.name || 'file-name'),
+      name: String(a.name || a.fileName || 'file-name'),
       mimeType: String(a.mimeType || 'image/png'),
-      size: Number(a.size || 0),
+      size: Number(a.size || a.fileSize || 0),
     }));
     setUploadedAssets((prev) => [...prev, ...formatted]);
   };
@@ -105,31 +133,80 @@ export default function ProjectWizardPage() {
       return;
     }
     setIsSubmitting(true);
-    try {
-      // Gửi thông tin dự án hoàn chỉnh lên main-api
-      await api.put(`/projects/${projectId}`, {
-        ...values,
-        price: parseFloat(values.price),
-        assets: uploadedAssets.map((a) => a.id),
-      });
 
-      // Tạo ScriptDraft nháp (Phase 1)
+    try {
+      let activeProjectId = realProjectId;
+
+      // ── Bước A: Nếu là mock projectId, tạo project thật trước ──
+      if (projectId.startsWith('mock-')) {
+        try {
+          const createRes = await api.post('/projects', {
+            name: values.name,
+            propertyType: values.propertyType.toUpperCase(),
+            address: values.address,
+            salePrice: parseFloat(values.price),
+            description: values.description,
+          });
+          activeProjectId = createRes.data.id;
+          setRealProjectId(activeProjectId);
+        } catch (createErr) {
+          console.warn('Không thể tạo project mới, tiếp tục với mock flow.', createErr);
+          // Vẫn tiếp tục với mock nếu backend lỗi
+        }
+      } else {
+        // ── Bước A (khi đã có projectId thật): Cập nhật thông tin project ──
+        await api.put(`/projects/${activeProjectId}`, {
+          name: values.name,
+          propertyType: values.propertyType,
+          address: values.address,
+          price: parseFloat(values.price),
+          description: values.description,
+          assets: uploadedAssets
+            .map((a) => a.id)
+            .filter((id) => !id.startsWith('mock-asset-')),
+        });
+      }
+
+      // ── Bước B: Lưu uploadedAssets vào sessionStorage để dùng ở Step 2 ──
+      sessionStorage.setItem(
+        getAssetsSessionKey(activeProjectId),
+        JSON.stringify(uploadedAssets),
+      );
+
+      // ── Bước C: Tạo ScriptDraft và kick-off AI job ──
       let activeDraftId = 'mock';
       try {
+        // Chỉ truyền asset ID thật (không phải mock) cho AI phân tích
+        const realAssetIds = uploadedAssets
+          .map((a) => a.id)
+          .filter((id) => !id.startsWith('mock-asset-'));
+
         const draftResponse = await api.post('/script-drafts', {
-          projectId,
+          projectId: activeProjectId,
+          mediaAssetIds: realAssetIds,
+          targetPlatform: 'TIKTOK',
         });
+
         if (draftResponse.data && draftResponse.data.data && draftResponse.data.data.id) {
           activeDraftId = draftResponse.data.data.id;
         }
       } catch (e) {
         console.warn('Tạo kịch bản nháp API lỗi, chạy Mock Flow.', e);
+        // Lưu cả assets cho mock projectId
+        sessionStorage.setItem(
+          getAssetsSessionKey(projectId),
+          JSON.stringify(uploadedAssets),
+        );
       }
 
-      router.push(`/dashboard/projects/${projectId}/wizard?step=2&draftId=${activeDraftId}`);
+      // ── Bước D: Chuyển sang Step 2 với projectId và draftId thật ──
+      router.push(
+        `/dashboard/projects/${activeProjectId}/wizard?step=2&draftId=${activeDraftId}`,
+      );
     } catch (error) {
       console.error('Lỗi khi lưu dự án:', error);
-      alert('Kết nối API nháp. Hệ thống demo sẽ chuyển hướng sang Trình Biên Tập Kịch Bản.');
+      // Fallback: lưu assets cho mock và chuyển bước
+      sessionStorage.setItem(getAssetsSessionKey(projectId), JSON.stringify(uploadedAssets));
       router.push(`/dashboard/projects/${projectId}/wizard?step=2&draftId=mock`);
     } finally {
       setIsSubmitting(false);
@@ -165,7 +242,7 @@ export default function ProjectWizardPage() {
           <span
             onClick={() =>
               uploadedAssets.length > 0 &&
-              router.push(`/dashboard/projects/${projectId}/wizard?step=1`)
+              router.push(`/dashboard/projects/${realProjectId}/wizard?step=1`)
             }
             className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
               currentStep === '1'
@@ -289,12 +366,17 @@ export default function ProjectWizardPage() {
                     placeholder="2 Tôn Đức Thắng, Bến Nghé, Quận 1"
                   />
                 </div>
-                {errors.address && <p className="text-xs text-red-500">{errors.address.message}</p>}
+                {errors.address && (
+                  <p className="text-xs text-red-500">{errors.address.message}</p>
+                )}
               </div>
 
               {/* Description */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-400 block" htmlFor="description">
+                <label
+                  className="text-xs font-semibold text-slate-400 block"
+                  htmlFor="description"
+                >
                   Ý Tưởng/Mô Tả Thêm Của Bạn
                 </label>
                 <textarea
@@ -313,7 +395,10 @@ export default function ProjectWizardPage() {
               className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold transition-all duration-200 transform hover:-translate-y-0.5 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Đang gửi thông tin & khởi động AI...</span>
+                </>
               ) : (
                 <>
                   Tiếp Tục Tạo Kịch Bản
@@ -361,11 +446,13 @@ export default function ProjectWizardPage() {
 
       {currentStep === '2' && (
         <ScriptEditor
-          projectId={projectId}
+          projectId={realProjectId}
           draftId={draftId}
           uploadedAssets={uploadedAssets}
           onNext={(renderedJobId) => {
-            router.push(`/dashboard/projects/${projectId}/wizard?step=3&jobId=${renderedJobId}`);
+            router.push(
+              `/dashboard/projects/${realProjectId}/wizard?step=3&jobId=${renderedJobId}`,
+            );
           }}
         />
       )}
@@ -373,9 +460,9 @@ export default function ProjectWizardPage() {
       {currentStep === '3' && (
         <VideoRenderPlayer
           jobId={jobId}
-          projectId={projectId}
+          projectId={realProjectId}
           onBackToEdit={() => {
-            router.push(`/dashboard/projects/${projectId}/wizard?step=2&draftId=${draftId}`);
+            router.push(`/dashboard/projects/${realProjectId}/wizard?step=2&draftId=${draftId}`);
           }}
         />
       )}

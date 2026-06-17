@@ -24,6 +24,14 @@ const bucketMedia = process.env.R2_BUCKET_MEDIA || 'realty-media';
 const bucketVideos = process.env.R2_BUCKET_VIDEOS || 'realty-videos';
 
 export async function downloadFromR2(storageKey: string, localPath: string): Promise<void> {
+  // Nếu không có credentials R2 (local dev), ném lỗi ngay để fallback kịp xử lý
+  // thay vì cố kết nối và gây SSL handshake failure
+  if (!process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) {
+    throw new Error(
+      `R2 not configured (missing R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY). Skipping R2 download for key: ${storageKey}`,
+    );
+  }
+
   const dir = path.dirname(localPath);
   await fs.promises.mkdir(dir, { recursive: true });
 

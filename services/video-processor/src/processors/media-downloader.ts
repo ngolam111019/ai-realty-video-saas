@@ -97,18 +97,34 @@ export async function downloadMediaAssets(
           break;
         } catch (err: any) {
           const testAssetsDir = path.resolve(__dirname, '../../test-assets');
-          const testAssetFallbackPath = path.join(testAssetsDir, asset.storageKey);
 
-          try {
-            await fs.access(testAssetFallbackPath);
-            logger.info(
-              { assetId, storageKey: asset.storageKey, fallbackPath: testAssetFallbackPath },
-              '[media-downloader] R2 download failed/skipped, using local test-assets fallback',
-            );
-            await fs.copyFile(testAssetFallbackPath, localPath);
-            lastError = null;
-            break;
-          } catch (accessErr) {
+          // Fallback 1: Đường dẫn đầy đủ (asset.storageKey = 'uploads/userId/projectId/file.jpg')
+          const testAssetFallbackPath = path.join(testAssetsDir, asset.storageKey);
+          // Fallback 2: Chỉ lấy tên file (phần cuối của path)
+          const baseNameFallbackPath = path.join(testAssetsDir, path.basename(asset.storageKey));
+          // Fallback 3: Tìm bất kỳ file nào trong test-assets có cùng loại (image/video)
+          const isVideo = asset.mimeType.startsWith('video/');
+          const genericFallbackName = isVideo ? 'test-property.mp4' : 'livingroom.jpg';
+          const genericFallbackPath = path.join(testAssetsDir, genericFallbackName);
+
+          let usedFallback = false;
+          for (const fallbackPath of [testAssetFallbackPath, baseNameFallbackPath, genericFallbackPath]) {
+            try {
+              await fs.access(fallbackPath);
+              logger.info(
+                { assetId, storageKey: asset.storageKey, fallbackPath },
+                '[media-downloader] R2 not configured / download failed, using local test-assets fallback',
+              );
+              await fs.copyFile(fallbackPath, localPath);
+              lastError = null;
+              usedFallback = true;
+              break;
+            } catch {
+              // thử fallback tiếp theo
+            }
+          }
+
+          if (!usedFallback) {
             lastError = err;
             logger.warn(
               { assetId, attempt, err: err.message || err },
@@ -117,6 +133,8 @@ export async function downloadMediaAssets(
             if (attempt < 3) {
               await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
             }
+          } else {
+            break; // Đã dùng fallback thành công, thoát retry loop
           }
         }
       }

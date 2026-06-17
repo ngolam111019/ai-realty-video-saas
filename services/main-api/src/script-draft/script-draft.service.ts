@@ -14,11 +14,11 @@ export class ScriptDraftService {
   async createDraft(userId: string, data: any) {
     const {
       projectId,
-      templateId,
       mediaAssetIds,
       portraitAssetId,
       targetPlatform,
     } = data;
+    let { templateId } = data;
 
     // Verify project exists and belongs to user
     const project = await this.prisma.project.findFirst({
@@ -28,10 +28,20 @@ export class ScriptDraftService {
       throw new NotFoundException('Project not found');
     }
 
-    // Verify template exists
-    const template = await this.prisma.videoTemplate.findUnique({
-      where: { id: templateId },
-    });
+    // Verify template exists or find default
+    let template;
+    if (templateId) {
+      template = await this.prisma.videoTemplate.findUnique({
+        where: { id: templateId },
+      });
+    } else {
+      template = await this.prisma.videoTemplate.findFirst({
+        where: { isActive: true },
+      });
+      if (template) {
+        templateId = template.id;
+      }
+    }
     if (!template) {
       throw new NotFoundException('Video template not found');
     }
@@ -60,6 +70,7 @@ export class ScriptDraftService {
     });
 
     return {
+      id: draft.id,
       draftId: draft.id,
       status: 'PROCESSING',
       estimatedSeconds: 60,
